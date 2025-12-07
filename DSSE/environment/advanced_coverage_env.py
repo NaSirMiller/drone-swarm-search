@@ -213,6 +213,7 @@ class AdvancedCoverageDroneSwarmSearch(DroneSwarmSearchBase):
         pass
 
     def create_observations(self) -> dict[str, tuple[tuple[int, int], np.ndarray]]:
+        # NOTE: Observations represent state space or observation space in POMDP
         """Creates observations given the current state of the environment
 
         :return: Returns a dictionary, where the keys are the name of the agents, like drone0, drone1, ... droneN.
@@ -288,7 +289,7 @@ class AdvancedCoverageDroneSwarmSearch(DroneSwarmSearchBase):
             # If the agent is searching, it will find the person with a probability of detection (POD)
             # The POD is multiplied by the probability of finding the person in the cell
             # The reward is the cumulative probability of success
-            rewards[agent] += (
+            rewards[agent] += (  # NOTE: Reward for finding person
                 old_prob_matrix[
                     self.agents_positions[idx][0], self.agents_positions[idx][1]
                 ]

@@ -35,5 +35,10 @@ rewards = 0
 done = False
 while not done:
     actions = random_policy(observations, env.get_agents())
+    print(f"Actions={actions}")
     observations, rewards, terminations, truncations, infos = env.step(actions)
+    print(f"Observations = {observations}")
+    print(f"Rewards={rewards}")
     done = any(terminations.values()) or any(truncations.values())
+    print(f"Finished={done}")
+print("Done")

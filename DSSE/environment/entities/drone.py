@@ -16,7 +16,9 @@ class DroneData:
 
     amount: int
     speed: float
-    pod: float = 1
+    pod: float = (
+        1  # NOTE: Emulates obsertvation model with stochasticity (use for POMDP).
+    )
 
     def __post_init__(self):
         if self.amount < 0:
