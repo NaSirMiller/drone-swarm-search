@@ -153,7 +153,7 @@ def run_simulations(args) -> Dict:
 
         ttf = ep_info.get("time_to_first_detection", args.max_steps)
         if ttf is None:
-            ttf = args.max_ste
+            ttf = args.max_steps
         ttf_across_runs.append(ttf)
 
         ttl = ep_info.get("time_to_last_detection", None)
