@@ -1,5 +1,6 @@
 from DSSE import DroneSwarmSearch
 from DSSE.environment.policies.baseline import greedy_pod_policy, exploratory_pod_policy
+from DSSE.environment.policies.multi_agent import collaborative_greedy_policy
 
 env = DroneSwarmSearch(
     grid_size=40,

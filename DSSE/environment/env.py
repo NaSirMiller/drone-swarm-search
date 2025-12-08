@@ -184,6 +184,13 @@ class DroneSwarmSearch(DroneSwarmSearchBase):
         observations, infos = super().reset(seed=seed, options=options)
         self.rewards_sum = {a: 0 for a in self.agents}
         self.rewards_sum["total"] = 0
+
+        # episode level metrics
+        self.time_to_first_detection = None
+        self.time_to_last_detection = None
+        self.num_leave_grid_events = 0
+        self.num_collision_events = 0
+
         return observations, infos
 
     def raise_if_unvalid_mult(self, individual_multiplication: list[int]) -> bool:
@@ -232,6 +239,7 @@ class DroneSwarmSearch(DroneSwarmSearchBase):
         rewards = {a: self.reward_scheme.default for a in self.agents}
         truncations = {a: False for a in self.agents}
         person_found = False
+        collision_this_step = False
 
         for idx, agent in enumerate(self.agents):
             if agent not in actions:
@@ -255,6 +263,7 @@ class DroneSwarmSearch(DroneSwarmSearchBase):
                 new_position = self.move_drone((drone_x, drone_y), drone_action)
                 if not self.is_valid_position(new_position):
                     rewards[agent] = self.reward_scheme.leave_grid
+                    self.num_leave_grid_events += 1
                 else:
                     self.agents_positions[idx] = new_position
                     rewards[agent] = self.reward_scheme.default
@@ -269,6 +278,10 @@ class DroneSwarmSearch(DroneSwarmSearchBase):
                                 rewards[other_agent] = (
                                     self.reward_scheme.drones_collision
                                 )
+
+                                if not collision_this_step:
+                                    self.num_collision_events += 1
+                                    collision_this_step = True
 
                                 # Terminate episode for all agents (crash ends mission)
                                 for a in self.agents:
@@ -291,6 +304,10 @@ class DroneSwarmSearch(DroneSwarmSearchBase):
                 max_detection_probability = min(human.get_mult() * self.drone.pod, 1)
 
                 if random_value <= max_detection_probability:
+                    # Successful detection
+                    if self.time_to_first_detection is None:
+                        self.time_to_first_detection = self.timestep
+
                     self.persons_set.remove(human)
 
                     time_decay_factor = 1 - (self.timestep / self.timestep_limit)
@@ -300,6 +317,9 @@ class DroneSwarmSearch(DroneSwarmSearchBase):
                     rewards[agent] = (
                         self.reward_scheme.search_and_find + time_reward_corrected
                     )
+
+                    if len(self.persons_set) == 0:
+                        self.time_to_last_detection = self.timestep
 
                 if len(self.persons_set) == 0:
                     person_found = True
@@ -311,7 +331,16 @@ class DroneSwarmSearch(DroneSwarmSearchBase):
 
         self.timestep += 1
         # Get dummy infos
-        infos = {drone: {"Found": person_found} for drone in self.agents}
+        infos = {
+            drone: {
+                "Found": person_found,
+                "time_to_first_detection": self.time_to_first_detection,
+                "time_to_last_detection": self.time_to_last_detection,
+                "num_leave_grid_events": self.num_leave_grid_events,
+                "num_collision_events": self.num_collision_events,
+            }
+            for drone in self.agents
+        }
 
         self.render_step(any(terminations.values()), person_found)
 

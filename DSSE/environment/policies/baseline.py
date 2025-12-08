@@ -1,29 +1,7 @@
 import numpy as np
 
 from DSSE.environment.constants import Actions
-
-
-def move_toward(curr: tuple[int, int], target: tuple[int, int]):
-    """
-    Simple mapping from (curr_x,curr_y) -> (target_x,target_y) into one discrete action.
-    Prioritizes the larger delta (Manhattan). If already at target, returns SEARCH.
-    """
-    cx, cy = curr
-    tx, ty = target
-    dx = tx - cx
-    dy = ty - cy
-
-    if dx == 0 and dy == 0:
-        print("searching...")
-        return Actions.SEARCH.value
-
-    # prefer horizontal when abs(dx) > abs(dy), else vertical
-    if abs(dx) > abs(dy):
-        print("moving horizontally...")
-        return Actions.RIGHT.value if dx > 0 else Actions.LEFT.value
-    else:
-        print("moving vertically...")
-        return Actions.DOWN.value if dy > 0 else Actions.UP.value
+from DSSE.environment.utils import move_toward
 
 
 def greedy_pod_policy(obs, agents, repulsion_weight=5):
