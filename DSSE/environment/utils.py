@@ -14,15 +14,15 @@ def move_toward(curr: tuple[int, int], target: tuple[int, int]):
     dy = ty - cy
 
     if dx == 0 and dy == 0:
-        print("searching...")
+        # print("searching...")
         return Actions.SEARCH.value
 
     # prefer horizontal when abs(dx) > abs(dy), else vertical
     if abs(dx) > abs(dy):
-        print("moving horizontally...")
+        # print("moving horizontally...")
         return Actions.RIGHT.value if dx > 0 else Actions.LEFT.value
     else:
-        print("moving vertically...")
+        # print("moving vertically...")
         return Actions.DOWN.value if dy > 0 else Actions.UP.value
 
 
