@@ -258,8 +258,25 @@ class DroneSwarmSearch(DroneSwarmSearchBase):
                 else:
                     self.agents_positions[idx] = new_position
                     rewards[agent] = self.reward_scheme.default
-                self.rewards_sum[agent] += rewards[agent]
-                continue
+
+                    # Check for collisions
+                    for j, other_agent in enumerate(self.agents):
+                        if j != idx:
+                            if self.agents_positions[j] == self.agents_positions[idx]:
+                                # Apply collision penalty
+                                print("Collision occurred!")
+                                rewards[agent] = self.reward_scheme.drones_collision
+                                rewards[other_agent] = (
+                                    self.reward_scheme.drones_collision
+                                )
+
+                                # Terminate episode for all agents (crash ends mission)
+                                for a in self.agents:
+                                    terminations[a] = True
+                                    truncations[a] = True
+                                break
+                    self.rewards_sum[agent] += rewards[agent]
+                    continue
 
             drone_found_person = False
             for human in self.persons_set:
