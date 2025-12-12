@@ -1,5 +1,6 @@
 from __future__ import annotations
 import argparse
+import time
 from typing import Dict, List
 
 from DSSE import DroneSwarmSearch
@@ -9,6 +10,7 @@ from DSSE.environment.policies.baseline import (
     random_policy,
 )
 from DSSE.environment.policies.multi_agent import collaborative_greedy_policy
+from DSSE.environment.policies.mcts import mcts_plan_centralized
 
 
 # ======================================= ARG PARSER ==============================================
@@ -31,7 +33,7 @@ def parse_args():
         "--policy",
         type=str,
         default="multi",
-        choices=["exploratory", "multi", "greedy", "random"],
+        choices=["exploratory", "multi", "greedy", "random", "mcts"],
         help="Which policy to benchmark.",
     )
     parser.add_argument("--debug", action="store_true")
@@ -75,6 +77,8 @@ def select_policy(policy_name: str):
         return greedy_pod_policy
     if name == "random":
         return random_policy
+    if name == "mcts":
+        return mcts_plan_centralized
     raise ValueError(f"Unknown policy '{policy_name}'.")
 
 
@@ -106,9 +110,17 @@ def run_simulations(args) -> Dict:
     leave_events_across_runs = []
     collision_events_across_runs = []
 
+    # --- timing containers ---
+    sim_durations: List[float] = []
+
+    # total time for this policy across all simulations
+    policy_start_time = time.perf_counter()
+
     for sim in range(args.num_simulations):
         if args.debug:
             print(f"\n=== Simulation {sim + 1}/{args.num_simulations} ===")
+
+        sim_start_time = time.perf_counter()
 
         obs, info = env.reset(options=OPT)
         done = False
@@ -128,6 +140,8 @@ def run_simulations(args) -> Dict:
             # Action selection
             if policy_fn.__name__ == "random_policy":
                 actions = policy_fn(obs, agents, env)
+            if policy_fn.__name__ == "mcts_plan_centralized":
+                actions = policy_fn(env, agents)
             else:
                 actions = policy_fn(obs, agents)
 
@@ -143,6 +157,14 @@ def run_simulations(args) -> Dict:
                     print("All targets saved.")
                 num_success += 1
                 break
+
+        # ---- per-simulation timing ----
+        sim_end_time = time.perf_counter()
+        sim_duration = sim_end_time - sim_start_time
+        sim_durations.append(sim_duration)
+
+        if args.debug:
+            print(f"Simulation runtime: {sim_duration:.4f} seconds")
 
         # ---- Extract metrics from infos ----
         if last_infos:
@@ -168,6 +190,13 @@ def run_simulations(args) -> Dict:
 
         total_saved_across_runs += episode_saved
 
+    # --- total policy runtime ---
+    policy_end_time = time.perf_counter()
+    total_runtime = policy_end_time - policy_start_time
+    avg_sim_runtime = (
+        total_runtime / args.num_simulations if args.num_simulations > 0 else 0.0
+    )
+
     if hasattr(env, "close"):
         env.close()
 
@@ -185,6 +214,9 @@ def run_simulations(args) -> Dict:
         else None
     )
 
+    min_sim_runtime = min(sim_durations) if sim_durations else 0.0
+    max_sim_runtime = max(sim_durations) if sim_durations else 0.0
+
     # ---- Summary ----
     print("\n================= SUMMARY =================")
     print(f"Policy:                          {args.policy}")
@@ -200,6 +232,11 @@ def run_simulations(args) -> Dict:
     )
     print(f"Avg leave-grid events per run:   {avg_leaves:.2f}")
     print(f"Avg collision events per run:    {avg_collisions:.2f}")
+    print("--------------- TIMING --------------------")
+    print(f"Total runtime (all simulations): {total_runtime:.4f} seconds")
+    print(f"Avg runtime per simulation:      {avg_sim_runtime:.4f} seconds")
+    print(f"Min simulation runtime:          {min_sim_runtime:.4f} seconds")
+    print(f"Max simulation runtime:          {max_sim_runtime:.4f} seconds")
 
     return {
         "num_success": num_success,
@@ -208,6 +245,10 @@ def run_simulations(args) -> Dict:
         "avg_ttl_success": avg_ttl_success,
         "avg_leaves": avg_leaves,
         "avg_collisions": avg_collisions,
+        "total_runtime": total_runtime,
+        "avg_sim_runtime": avg_sim_runtime,
+        "min_sim_runtime": min_sim_runtime,
+        "max_sim_runtime": max_sim_runtime,
     }
 
 

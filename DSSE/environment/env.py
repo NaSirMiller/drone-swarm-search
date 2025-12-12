@@ -18,15 +18,6 @@ class DroneSwarmSearch(DroneSwarmSearchBase):
         "name": "DroneSwarmSearchV0",
     }
 
-    reward_scheme = Reward(
-        default=0.0,
-        leave_grid=0,
-        exceed_timestep=0,
-        drones_collision=0,
-        search_cell=0,
-        search_and_find=1,
-    )
-
     def __init__(
         self,
         grid_size=20,
