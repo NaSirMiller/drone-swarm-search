@@ -84,8 +84,8 @@ def _enumerate_joint_actions(
 def mcts_plan_centralized(
     env,
     agents: Sequence[str],
-    num_simulations: int = 50,
-    max_rollout_depth: int = 100,
+    num_simulations: int = 1,
+    max_rollout_depth: int = 0,
 ) -> Dict[str, int]:
     """
     Centralized multi-drone MCTS planner.

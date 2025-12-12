@@ -18,6 +18,25 @@ class DroneSwarmSearch(DroneSwarmSearchBase):
         "name": "DroneSwarmSearchV0",
     }
 
+    # -------------------------------------------------------------------------
+    # REWARD SCHEME (paper)
+    # -------------------------------------------------------------------------
+    # Move (default)                            -> +1
+    # Move and leave grid                       -> -100000
+    # Move and collide with other agents        -> -100000
+    # Search cell with prob < 1%                -> -100
+    # Search cell with prob >= 1% (no person)   -> prob(cell) * 10000
+    # Search cell containing shipwrecked person -> 10000 + 10000 * (1 - timestep/timestep_limit)
+    # Any action beyond timestep_limit          -> -100000
+    reward_scheme = Reward(
+        default=1.0,
+        leave_grid=-100000.0,
+        exceed_timestep=-100000.0,
+        drones_collision=-100000.0,
+        search_cell=-100.0,  # used for low-probability searches
+        search_and_find=10000.0,  # base term for successful detection
+    )
+
     def __init__(
         self,
         grid_size=20,
@@ -59,8 +78,8 @@ class DroneSwarmSearch(DroneSwarmSearchBase):
             (pre_render_time * 60)
             / (self.calculate_simulation_time_step(drone_speed, self.cell_size))
         )
-        print(f"Pre render time: {pre_render_time} minutes")
-        print(f"Pre render steps: {self.pre_render_steps}")
+        # print(f"Pre render time: {pre_render_time} minutes")
+        # print(f"Pre render steps: {self.pre_render_steps}")
 
         # Prob matrix
         self.probability_matrix = None
@@ -229,10 +248,13 @@ class DroneSwarmSearch(DroneSwarmSearchBase):
             raise ValueError("Please reset the env before interacting with it")
 
         terminations = {a: False for a in self.agents}
-        rewards = {a: self.reward_scheme.default for a in self.agents}
+        rewards = {a: 0.0 for a in self.agents}
         truncations = {a: False for a in self.agents}
         person_found = False
         collision_this_step = False
+
+        # Probability map at *current* timestep (before we advance it in create_observations)
+        prob_matrix = self.probability_matrix.get_matrix()
 
         for idx, agent in enumerate(self.agents):
             if agent not in actions:
@@ -242,7 +264,7 @@ class DroneSwarmSearch(DroneSwarmSearchBase):
             if drone_action not in self.action_space(agent):
                 raise ValueError("Invalid action for " + agent)
 
-            # Check truncation conditions (overwrites termination conditions)
+            # Check truncation conditions (paper: any action after timestep_limit -> -100000)
             if self.timestep >= self.timestep_limit:
                 rewards[agent] = self.reward_scheme.exceed_timestep
                 truncations[agent] = True
@@ -253,81 +275,84 @@ class DroneSwarmSearch(DroneSwarmSearchBase):
             is_searching = drone_action == Actions.SEARCH.value
 
             # ------------------ MOVEMENT / LEAVE-GRID / COLLISIONS ------------------
-            if drone_action != Actions.SEARCH.value:
+            if not is_searching:
                 new_position = self.move_drone((drone_x, drone_y), drone_action)
                 if not self.is_valid_position(new_position):
-                    # Leaving the grid
+                    # Leaving the grid: large negative reward
                     rewards[agent] = self.reward_scheme.leave_grid
                     self.num_leave_grid_events += 1
                 else:
-                    # Valid movement
+                    # Valid movement with default +1 reward *unless* a collision happens
                     self.agents_positions[idx] = new_position
                     rewards[agent] = self.reward_scheme.default
 
                     # Check for collisions
                     for j, other_agent in enumerate(self.agents):
-                        if j != idx:
-                            if self.agents_positions[j] == self.agents_positions[idx]:
-                                # Apply collision penalty
-                                print("Collision occurred!")
-                                rewards[agent] = self.reward_scheme.drones_collision
-                                rewards[other_agent] = (
-                                    self.reward_scheme.drones_collision
-                                )
+                        if (
+                            j != idx
+                            and self.agents_positions[j] == self.agents_positions[idx]
+                        ):
+                            # collision with other agent
+                            # print("Collision occurred!")
+                            rewards[agent] = self.reward_scheme.drones_collision
+                            rewards[other_agent] = self.reward_scheme.drones_collision
 
-                                if not collision_this_step:
-                                    self.num_collision_events += 1
-                                    collision_this_step = True
+                            if not collision_this_step:
+                                self.num_collision_events += 1
+                                collision_this_step = True
 
-                                # Terminate episode for all agents (crash ends mission)
-                                for a in self.agents:
-                                    terminations[a] = True
-                                    truncations[a] = True
-                                break
+                            # Terminate episode for all agents (crash ends mission)
+                            for a in self.agents:
+                                terminations[a] = True
+                                truncations[a] = True
+                            break
 
-                # Skip search/detection logic if we moved (or left grid)
-                # Detection only happens when SEARCHing in-place.
+                # No search if we moved (or left grid)
                 continue
 
             # ------------------ SEARCH / DETECTION LOGIC ------------------
             # Only reach here if action == SEARCH
+            cell_prob = float(prob_matrix[drone_y, drone_x])
             drone_found_person = False
+            found_human = None
+
             for human in self.persons_set:
-                drone_found_person = (
-                    human.x == drone_x and human.y == drone_y and is_searching
-                )
-                if drone_found_person:
+                if human.x == drone_x and human.y == drone_y:
+                    drone_found_person = True
+                    found_human = human
                     break
 
-            random_value = random()
-            if drone_found_person:
-                max_detection_probability = min(human.get_mult() * self.drone.pod, 1)
+            # Detection attempt if a person is in this cell
+            detection_success = False
+            if drone_found_person and found_human is not None:
+                random_value = random()
+                max_detection_probability = min(
+                    found_human.get_mult() * self.drone.pod, 1.0
+                )
+                detection_success = random_value <= max_detection_probability
 
-                if random_value <= max_detection_probability:
-                    # Successful detection
-                    if self.time_to_first_detection is None:
-                        self.time_to_first_detection = self.timestep
+            if detection_success:
+                # Successful detection of the shipwrecked person
+                if self.time_to_first_detection is None:
+                    self.time_to_first_detection = self.timestep
 
-                    self.persons_set.remove(human)
+                self.persons_set.remove(found_human)
 
-                    time_decay_factor = 1 - (self.timestep / self.timestep_limit)
-                    time_reward_corrected = (
-                        self.reward_scheme.search_and_find * time_decay_factor
-                    )
-                    base_reward = (
-                        self.reward_scheme.search_and_find + time_reward_corrected
-                    )
+                # Reward: 10000 + 10000 * (1 - timestep / timestep_limit)
+                time_factor = 1.0 - (self.timestep / self.timestep_limit)
+                base_reward = self.reward_scheme.search_and_find + (
+                    self.reward_scheme.search_and_find * time_factor
+                )
 
-                    if self.use_global_reward:
-                        # Team reward: every agent gets the same detection reward
-                        for a in self.agents:
-                            rewards[a] = base_reward
-                    else:
-                        # Individual reward: only the detecting agent is rewarded
-                        rewards[agent] = base_reward
+                if self.use_global_reward:
+                    # Team reward
+                    for a in self.agents:
+                        rewards[a] = base_reward
+                else:
+                    rewards[agent] = base_reward
 
-                    if len(self.persons_set) == 0:
-                        self.time_to_last_detection = self.timestep
+                if len(self.persons_set) == 0:
+                    self.time_to_last_detection = self.timestep
 
                 # If no persons remain, end the episode for all
                 if len(self.persons_set) == 0:
@@ -335,6 +360,23 @@ class DroneSwarmSearch(DroneSwarmSearchBase):
                     for a in self.agents:
                         terminations[a] = True
                         truncations[a] = True
+
+            else:
+                # Search did NOT successfully detect a person in this cell
+                # (either none present or detection failed). Reward depends
+                # on the probability of the cell in the probability map.
+                if cell_prob < 0.01:
+                    # Cell prob < 1% -> -100
+                    search_reward = self.reward_scheme.search_cell
+                else:
+                    # Cell prob >= 1% -> prob * 10000
+                    search_reward = cell_prob * 10000.0
+
+                if self.use_global_reward:
+                    for a in self.agents:
+                        rewards[a] = search_reward
+                else:
+                    rewards[agent] = search_reward
 
         # ------------------ POST-STEP BOOKKEEPING ------------------
         self.timestep += 1
@@ -357,7 +399,7 @@ class DroneSwarmSearch(DroneSwarmSearchBase):
 
         self.render_step(any(terminations.values()), person_found)
 
-        # Get observations
+        # Get observations for next step (this also advances prob matrix & persons)
         observations = self.create_observations()
 
         # If terminated, reset the agents list (PettingZoo parallel env requirement)
@@ -382,7 +424,7 @@ class DroneSwarmSearch(DroneSwarmSearchBase):
 
     def build_movement_matrix(self, person: Person) -> np.ndarray:
         """
-        Builds and outputs a 3x3 matrix from the probabality matrix to use in the person movement function.
+        Builds and outputs a 3x3 matrix from the probability matrix to use in the person movement function.
         """
         # Boundaries for the 3x3 movement matrix.
         left_x = max(person.x - 1, 0)

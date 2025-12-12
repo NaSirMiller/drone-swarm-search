@@ -1,0 +1,5 @@
+Running benchmarks for all policies...
+Logs will be saved in ./logs
+--------------------------------------
+Running policy: bb
+Logging to: ./logs/bb.log

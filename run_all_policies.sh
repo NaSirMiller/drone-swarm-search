@@ -8,8 +8,8 @@ mkdir -p "$LOG_DIR"
 SCRIPT="evaluate.py"
 
 # List of policies
-# POLICIES=("multi" "exploratory" "greedy" "random" "mcts")
-POLICIES=("mcts")
+#POLICIES=("multi" "exploratory" "greedy" "random" "sparse" "bb")
+POLICIES=("bb" "sparse")
 
 # Number of simulations
 SIMS=1000

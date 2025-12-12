@@ -11,6 +11,8 @@ from DSSE.environment.policies.baseline import (
 )
 from DSSE.environment.policies.multi_agent import collaborative_greedy_policy
 from DSSE.environment.policies.mcts import mcts_plan_centralized
+from DSSE.environment.policies.bb import branch_and_bound_plan
+from DSSE.environment.policies.sparse import sparse_sampling_plan
 
 
 # ======================================= ARG PARSER ==============================================
@@ -33,7 +35,7 @@ def parse_args():
         "--policy",
         type=str,
         default="multi",
-        choices=["exploratory", "multi", "greedy", "random", "mcts"],
+        choices=["exploratory", "multi", "greedy", "random", "mcts", "sparse", "bb"],
         help="Which policy to benchmark.",
     )
     parser.add_argument("--debug", action="store_true")
@@ -79,6 +81,10 @@ def select_policy(policy_name: str):
         return random_policy
     if name == "mcts":
         return mcts_plan_centralized
+    if name == "sparse":
+        return sparse_sampling_plan
+    if name == "bb":
+        return branch_and_bound_plan
     raise ValueError(f"Unknown policy '{policy_name}'.")
 
 
@@ -140,7 +146,11 @@ def run_simulations(args) -> Dict:
             # Action selection
             if policy_fn.__name__ == "random_policy":
                 actions = policy_fn(obs, agents, env)
-            if policy_fn.__name__ == "mcts_plan_centralized":
+            elif (
+                policy_fn.__name__ == "mcts_plan_centralized"
+                or policy_fn.__name__ == "branch_and_bound_plan"
+                or policy_fn.__name__ == "sparse_sampling_plan"
+            ):
                 actions = policy_fn(env, agents)
             else:
                 actions = policy_fn(obs, agents)
