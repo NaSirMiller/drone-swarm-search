@@ -45,6 +45,7 @@ class DroneSwarmSearch(DroneSwarmSearchBase):
         pre_render_time=0,
         grid_cell_size=130,
         fps=5,
+        use_global_reward=False,
     ):
         if person_amount <= 0:
             raise ValueError("The number of persons must be greater than 0.")
@@ -92,6 +93,7 @@ class DroneSwarmSearch(DroneSwarmSearchBase):
         self.observation_spaces = {
             agent: self.observation_space(agent) for agent in self.possible_agents
         }
+        self.use_global_reward = use_global_reward
 
     def create_persons_set(self) -> set[Person]:
         persons_set = set()
@@ -259,12 +261,15 @@ class DroneSwarmSearch(DroneSwarmSearchBase):
             drone_x, drone_y = self.agents_positions[idx]
             is_searching = drone_action == Actions.SEARCH.value
 
+            # ------------------ MOVEMENT / LEAVE-GRID / COLLISIONS ------------------
             if drone_action != Actions.SEARCH.value:
                 new_position = self.move_drone((drone_x, drone_y), drone_action)
                 if not self.is_valid_position(new_position):
+                    # Leaving the grid
                     rewards[agent] = self.reward_scheme.leave_grid
                     self.num_leave_grid_events += 1
                 else:
+                    # Valid movement
                     self.agents_positions[idx] = new_position
                     rewards[agent] = self.reward_scheme.default
 
@@ -288,9 +293,13 @@ class DroneSwarmSearch(DroneSwarmSearchBase):
                                     terminations[a] = True
                                     truncations[a] = True
                                 break
-                    self.rewards_sum[agent] += rewards[agent]
-                    continue
 
+                # Skip search/detection logic if we moved (or left grid)
+                # Detection only happens when SEARCHing in-place.
+                continue
+
+            # ------------------ SEARCH / DETECTION LOGIC ------------------
+            # Only reach here if action == SEARCH
             drone_found_person = False
             for human in self.persons_set:
                 drone_found_person = (
@@ -314,23 +323,36 @@ class DroneSwarmSearch(DroneSwarmSearchBase):
                     time_reward_corrected = (
                         self.reward_scheme.search_and_find * time_decay_factor
                     )
-                    rewards[agent] = (
+                    base_reward = (
                         self.reward_scheme.search_and_find + time_reward_corrected
                     )
+
+                    if self.use_global_reward:
+                        # Team reward: every agent gets the same detection reward
+                        for a in self.agents:
+                            rewards[a] = base_reward
+                    else:
+                        # Individual reward: only the detecting agent is rewarded
+                        rewards[agent] = base_reward
 
                     if len(self.persons_set) == 0:
                         self.time_to_last_detection = self.timestep
 
+                # If no persons remain, end the episode for all
                 if len(self.persons_set) == 0:
                     person_found = True
-                    for agent in self.agents:
-                        terminations[agent] = True
-                        truncations[agent] = True
+                    for a in self.agents:
+                        terminations[a] = True
+                        truncations[a] = True
 
-            self.rewards_sum[agent] += rewards[agent]
-
+        # ------------------ POST-STEP BOOKKEEPING ------------------
         self.timestep += 1
-        # Get dummy infos
+
+        # Accumulate rewards for this step
+        for a in self.agents:
+            self.rewards_sum[a] += rewards[a]
+
+        # Build infos with episode-level metrics
         infos = {
             drone: {
                 "Found": person_found,
@@ -346,9 +368,11 @@ class DroneSwarmSearch(DroneSwarmSearchBase):
 
         # Get observations
         observations = self.create_observations()
-        # If terminated, reset the agents (pettingzoo parallel env requirement)
+
+        # If terminated, reset the agents list (PettingZoo parallel env requirement)
         if any(terminations.values()) or any(truncations.values()):
             self.agents = []
+
         return observations, rewards, terminations, truncations, infos
 
     def render_step(self, terminal, person_found):

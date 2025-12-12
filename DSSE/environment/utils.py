@@ -3,26 +3,43 @@ import numpy as np
 from DSSE.environment.constants import Actions
 
 
+import numpy as np
+from DSSE.environment.constants import Actions
+
+
 def move_toward(curr: tuple[int, int], target: tuple[int, int]):
     """
-    Simple mapping from (curr_x,curr_y) -> (target_x,target_y) into one discrete action.
-    Prioritizes the larger delta (Manhattan). If already at target, returns SEARCH.
+    Map (curr_x, curr_y) -> (target_x, target_y) into a discrete action.
+
+    - If already at target: SEARCH
+    - Otherwise: move along the dominant axis
+    - If |dx| == |dy| (tie), break ties randomly to avoid deterministic
+      up/down or left/right oscillations.
     """
     cx, cy = curr
     tx, ty = target
     dx = tx - cx
     dy = ty - cy
 
+    # Already at target: search
     if dx == 0 and dy == 0:
-        # print("searching...")
         return Actions.SEARCH.value
 
-    # prefer horizontal when abs(dx) > abs(dy), else vertical
-    if abs(dx) > abs(dy):
-        # print("moving horizontally...")
+    adx = abs(dx)
+    ady = abs(dy)
+
+    # Prefer horizontal if strictly larger
+    if adx > ady:
+        return Actions.RIGHT.value if dx > 0 else Actions.LEFT.value
+
+    # Prefer vertical if strictly larger
+    if ady > adx:
+        return Actions.DOWN.value if dy > 0 else Actions.UP.value
+
+    # Tie: |dx| == |dy| and both non-zero -> break tie randomly
+    if np.random.rand() < 0.5:
         return Actions.RIGHT.value if dx > 0 else Actions.LEFT.value
     else:
-        # print("moving vertically...")
         return Actions.DOWN.value if dy > 0 else Actions.UP.value
 
 

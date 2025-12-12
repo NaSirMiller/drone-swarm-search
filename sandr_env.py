@@ -16,6 +16,7 @@ env = DroneSwarmSearch(
     drone_speed=10,
     probability_of_detection=0.9,
     pre_render_time=0,
+    use_global_reward=True,
 )
 
 opt = {
@@ -30,7 +31,7 @@ done = False
 episode = 0
 prev_actions = []
 while not done:
-    actions = exploratory_pod_policy(observations, env.get_agents())
+    actions = collaborative_greedy_policy(observations, env.get_agents())
     observations, rewards, terminations, truncations, infos = env.step(actions)
     done = any(terminations.values()) or any(truncations.values())
     episode += 1

@@ -35,7 +35,7 @@ for POLICY in "${POLICIES[@]}"; do
         --policy "$POLICY" \
         --num-simulations "$SIMS" \
         --debug \
-        >> "$LOG_FILE" 2>&1
+        > "$LOG_FILE" 2>&1
 
     echo "Finished $POLICY"
     echo
