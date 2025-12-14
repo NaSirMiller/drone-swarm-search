@@ -100,7 +100,7 @@ def _bnb_value(
 def branch_and_bound_plan(
     env,
     agents: Sequence[str],
-    depth: int = 2,
+    depth: int = 1,
     debug: bool = True,
 ) -> Dict[str, int]:
     """

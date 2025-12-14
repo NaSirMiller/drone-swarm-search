@@ -11,7 +11,6 @@ def greedy_pod_policy(obs, agents, repulsion_weight=5):
     drone_positions = {agent: obs[agent][0] for agent in agents}  # 0 = position
 
     for agent in agents:
-        print(f"================ AGENT {agent} ==================")
         position, pod = obs[agent]  # unpack tuple
         ax, ay = position
 
