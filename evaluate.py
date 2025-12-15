@@ -1,6 +1,6 @@
 from __future__ import annotations
 import argparse
-import datetime
+from datetime import datetime
 import json
 import os
 import time
@@ -63,7 +63,7 @@ def make_env(args) -> DroneSwarmSearch:
         timestep_limit=args.max_steps,
         person_amount=args.num_targets,
         dispersion_inc=0.05,
-        person_initial_position=center,  # ✅ FIXED
+        person_initial_position=center,
         drone_amount=args.num_drones,
         drone_speed=args.drone_speed,
         probability_of_detection=args.pod,
@@ -139,7 +139,7 @@ def save_results_to_file(results: Dict, args, out_dir: str = "./results") -> str
     payload = {
         "args": vars(args),
         "results": results,
-        "saved_at": datetime.now().isoformat(timespec="seconds"),
+        "saved_at": datetime.now().isoformat(),
     }
 
     fname = f"{args.policy}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
@@ -354,6 +354,7 @@ def run_simulations(args) -> Dict:
 def main():
     args = parse_args()
     results = run_simulations(args)
+    # results = {"hello": "world"}
     out_path = save_results_to_file(results, args, out_dir="./results")
     print(f"\nSaved results to: {out_path}")
 

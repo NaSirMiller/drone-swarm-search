@@ -167,3 +167,7 @@ dist/
 .vscode/
 .idea/
 *.sublime-workspace
+
+# Evaluation specifics
+results/
+plots/
